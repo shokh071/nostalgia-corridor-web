@@ -90,12 +90,21 @@ const startBtn = document.getElementById('startBtn');
 let playerName = 'Mehmon';
 let refreshNameTag = () => {};
 
+// Phones/tablets have no mouse to pointer-lock and no keyboard for WASD —
+// mobileActive is the touch-controls equivalent of controls.isLocked.
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+let mobileActive = false;
+
 function startGame() {
   const typed = nameInput.value.trim();
   if (typed) playerName = typed.slice(0, 16);
   refreshNameTag();
   nameInput.blur(); // otherwise Enter-to-start leaves focus on the field and swallows all game keys
-  controls.lock();
+  if (isTouchDevice) {
+    activateMobileControls();
+  } else {
+    controls.lock();
+  }
 }
 startBtn.addEventListener('click', startGame);
 overlay.addEventListener('click', (e) => {
@@ -111,6 +120,132 @@ controls.addEventListener('lock', () => {
   if (ambienceSound.paused) ambienceSound.play().catch(() => {});
 });
 controls.addEventListener('unlock', () => (overlay.style.display = 'flex'));
+
+// ---------- Mobile touch controls ----------
+if (isTouchDevice) {
+  document.body.classList.add('mobile');
+  const hint = document.getElementById('controlsHint');
+  if (hint) hint.textContent = 'Chapdagi doiracha — yurish  |  Ekranni suring — qarash  |  ⬆ — sakrash  |  E — eshik/video  |  ⟳ — 1/3-shaxs';
+}
+
+let mobileYaw = 0;
+let mobilePitch = 0;
+const joyVec = { x: 0, y: 0 };
+
+function activateMobileControls() {
+  mobileActive = true;
+  overlay.style.display = 'none';
+  if (ambienceSound.paused) ambienceSound.play().catch(() => {});
+  const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+  mobileYaw = e.y;
+  mobilePitch = e.x;
+}
+
+function doJump() {
+  if (isGrounded && (controls.isLocked || mobileActive)) {
+    jumpVelocity = JUMP_SPEED;
+    isGrounded = false;
+    playJumpSound();
+  }
+}
+
+if (isTouchDevice) {
+  // Look: drag anywhere on the canvas (joystick/buttons sit on their own elements above it).
+  let lookTouchId = null;
+  let lookLastX = 0;
+  let lookLastY = 0;
+  const LOOK_SENSITIVITY = 0.0028;
+
+  renderer.domElement.addEventListener('touchstart', (e) => {
+    if (!mobileActive) return;
+    const t = e.changedTouches[0];
+    lookTouchId = t.identifier;
+    lookLastX = t.clientX;
+    lookLastY = t.clientY;
+  }, { passive: true });
+
+  renderer.domElement.addEventListener('touchmove', (e) => {
+    if (!mobileActive || lookTouchId === null) return;
+    for (const t of e.changedTouches) {
+      if (t.identifier !== lookTouchId) continue;
+      const dx = t.clientX - lookLastX;
+      const dy = t.clientY - lookLastY;
+      lookLastX = t.clientX;
+      lookLastY = t.clientY;
+      mobileYaw -= dx * LOOK_SENSITIVITY;
+      mobilePitch -= dy * LOOK_SENSITIVITY;
+      mobilePitch = Math.max(-1.45, Math.min(1.45, mobilePitch));
+      camera.quaternion.setFromEuler(new THREE.Euler(mobilePitch, mobileYaw, 0, 'YXZ'));
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  const endLookTouch = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === lookTouchId) lookTouchId = null;
+    }
+  };
+  renderer.domElement.addEventListener('touchend', endLookTouch);
+  renderer.domElement.addEventListener('touchcancel', endLookTouch);
+
+  // Movement joystick (bottom-left).
+  const joystickZone = document.getElementById('joystickZone');
+  const joystickKnob = document.getElementById('joystickKnob');
+  const JOY_RADIUS = 45;
+  let joyTouchId = null;
+
+  function updateJoystick(t) {
+    const rect = joystickZone.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const angle = Math.atan2(t.clientY - cy, t.clientX - cx);
+    const dist = Math.min(JOY_RADIUS, Math.hypot(t.clientX - cx, t.clientY - cy));
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist;
+    joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+    joyVec.x = dx / JOY_RADIUS;
+    joyVec.y = dy / JOY_RADIUS;
+  }
+  function resetJoystick() {
+    joyTouchId = null;
+    joyVec.x = 0; joyVec.y = 0;
+    joystickKnob.style.transform = 'translate(0px, 0px)';
+  }
+  joystickZone.addEventListener('touchstart', (e) => {
+    const t = e.changedTouches[0];
+    joyTouchId = t.identifier;
+    updateJoystick(t);
+    e.preventDefault();
+  }, { passive: false });
+  joystickZone.addEventListener('touchmove', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) updateJoystick(t);
+    }
+    e.preventDefault();
+  }, { passive: false });
+  joystickZone.addEventListener('touchend', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) resetJoystick();
+    }
+  });
+  joystickZone.addEventListener('touchcancel', resetJoystick);
+
+  // Jump / interact / view buttons.
+  document.getElementById('jumpBtn').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    doJump();
+  }, { passive: false });
+  document.getElementById('interactBtn').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    tryInteract();
+  }, { passive: false });
+  document.getElementById('viewBtn').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    thirdPerson = !thirdPerson;
+    if (playerModel) playerModel.visible = thirdPerson;
+    nameTagSprite.visible = thirdPerson;
+  }, { passive: false });
+}
 
 // ---------- Audio (Mixkit, free license) ----------
 const footstepSounds = ['./sounds/step1.mp3', './sounds/step2.mp3', './sounds/step3.mp3'].map((src) => {
@@ -1283,11 +1418,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Tab' || e.code === 'Space') {
     e.preventDefault(); // Tab would otherwise tab focus away (and can even exit pointer lock in some browsers)
-    if (isGrounded && controls.isLocked) {
-      jumpVelocity = JUMP_SPEED;
-      isGrounded = false;
-      playJumpSound();
-    }
+    doJump();
   }
 });
 document.addEventListener('keyup', (e) => {
@@ -1430,7 +1561,7 @@ function animate() {
   for (const t of waterAnimTextures) { t.offset.x += dt * 0.015; t.offset.y += dt * 0.008; }
   updateRemotePlayers(dt);
 
-  if (controls.isLocked) {
+  if (controls.isLocked || mobileActive) {
     forward.set(0, 0, -1).applyQuaternion(camera.quaternion);
     forward.y = 0; forward.normalize();
     right.set(1, 0, 0).applyQuaternion(camera.quaternion);
@@ -1441,6 +1572,10 @@ function animate() {
     if (keys.s) velocity.sub(forward);
     if (keys.d) velocity.add(right);
     if (keys.a) velocity.sub(right);
+    if (joyVec.x !== 0 || joyVec.y !== 0) {
+      velocity.addScaledVector(forward, -joyVec.y); // stick up (negative y) = forward
+      velocity.addScaledVector(right, joyVec.x);
+    }
     const isMoving = velocity.lengthSq() > 0;
     if (isMoving) velocity.normalize().multiplyScalar(MOVE_SPEED * dt);
 
