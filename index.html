@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nostalgia Corridor</title>
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#ffcc66" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Nostalgia" />
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; background: #000; height: 100%; }
+    canvas { display: block; }
+    #crosshair {
+      position: fixed; top: 50%; left: 50%; width: 6px; height: 6px;
+      margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,0.8);
+      pointer-events: none; z-index: 10;
+      box-shadow: 0 0 3px rgba(0,0,0,0.8);
+    }
+    #prompt {
+      position: fixed; bottom: 18%; left: 50%; transform: translateX(-50%);
+      color: #fff; font: 600 16px/1.4 system-ui, sans-serif;
+      background: rgba(0,0,0,0.55); padding: 8px 14px; border-radius: 6px;
+      pointer-events: none; z-index: 10; display: none; text-align: center;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    }
+    #overlay {
+      position: fixed; inset: 0; background: rgba(10,10,14,0.92);
+      color: #fff; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center; font: 400 16px/1.6 system-ui, sans-serif;
+      z-index: 20;
+    }
+    #overlay h1 { font-size: 28px; margin: 0 0 12px; font-weight: 700; }
+    #overlay p { margin: 4px 0; opacity: 0.85; }
+    #overlay .hint { margin-top: 18px; font-size: 14px; opacity: 0.6; }
+    #nameInput {
+      margin-top: 18px; padding: 10px 14px; font-size: 16px; border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.08); color: #fff;
+      text-align: center; width: 220px; outline: none;
+    }
+    #nameInput:focus { border-color: #ffcc66; }
+    #startBtn {
+      margin-top: 14px; padding: 10px 26px; font-size: 16px; font-weight: 600;
+      border-radius: 6px; border: none; background: #ffcc66; color: #221a0a; cursor: pointer;
+    }
+    #startBtn:hover { background: #ffd98a; }
+    #hud {
+      position: fixed; top: 14px; left: 14px; color: #fff; font: 500 13px/1.5 system-ui, sans-serif;
+      background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 6px; z-index: 10;
+      pointer-events: none;
+    }
+    #viewHint {
+      position: fixed; top: 14px; right: 14px; color: #fff; font: 500 13px/1.5 system-ui, sans-serif;
+      background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 6px; z-index: 10;
+      pointer-events: none;
+    }
+    #chatHint {
+      position: fixed; bottom: 14px; left: 14px; color: #fff; font: 500 12px/1.5 system-ui, sans-serif;
+      background: rgba(0,0,0,0.35); padding: 6px 10px; border-radius: 6px; z-index: 10;
+      pointer-events: none; opacity: 0.75;
+    }
+    #chatInput {
+      position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+      width: min(420px, 80vw); padding: 10px 14px; font-size: 15px; border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.35); background: rgba(10,10,14,0.85); color: #fff;
+      outline: none; z-index: 15; display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <h1>Nostalgia Corridor</h1>
+    <p>WASD — yurish &nbsp;|&nbsp; Sichqoncha — qarash &nbsp;|&nbsp; E — eshik/video &nbsp;|&nbsp; Tab — sakrash &nbsp;|&nbsp; V — 1/3-shaxs</p>
+    <input id="nameInput" type="text" placeholder="Ismingizni yozing..." maxlength="16" autocomplete="off" />
+    <button id="startBtn">Boshlash</button>
+    <p class="hint">yoki shu yerni bosing</p>
+  </div>
+  <div id="hud">Ochiq eshiklar: 0/0</div>
+  <div id="viewHint">V — ko'rinishni almashtirish</div>
+  <div id="crosshair"></div>
+  <div id="prompt">E — eshikni och</div>
+  <div id="chatHint">Enter — chat yozish</div>
+  <input id="chatInput" type="text" maxlength="200" placeholder="Xabar yozing... (Enter — yuborish, Esc — bekor qilish)" autocomplete="off" />
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./main.js?v=41"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      const registerSW = () => navigator.serviceWorker.register('./sw.js').catch(() => {});
+      if (document.readyState === 'complete') registerSW();
+      else window.addEventListener('load', registerSW);
+    }
+  </script>
+</body>
+</html>
