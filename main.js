@@ -29,6 +29,9 @@ const FIRST_PERSON_EYE_HEIGHT = 1.65;
 const JUMP_SPEED = 5.2;
 const GRAVITY = 15;
 
+// Phones have far weaker GPUs than desktop, so render at a cheaper resolution/quality there.
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
 // ---------- Scene / Renderer / Camera ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x030304);
@@ -45,8 +48,8 @@ camera.rotation.y = Math.PI; // face down the corridor (+Z), not back at the ent
 const playerPos = new THREE.Vector3(0, 0, 2);
 camera.position.set(playerPos.x, playerPos.y + THIRD_PERSON_HEIGHT, playerPos.z + THIRD_PERSON_DISTANCE);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ antialias: !isTouchDevice });
+renderer.setPixelRatio(isTouchDevice ? 1 : Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = false; // no light casts shadows anymore — this was the single biggest FPS cost
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -56,7 +59,7 @@ document.body.appendChild(renderer.domElement);
 
 const stats = new Stats();
 stats.dom.style.top = '54px'; // clear the HUD chip in the top-left corner
-document.body.appendChild(stats.dom);
+if (!isTouchDevice) document.body.appendChild(stats.dom); // debug overlay only clutters the phone UI
 
 // synthetic room env renders instantly; swapped for a real photographed HDRI once it loads
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -92,7 +95,6 @@ let refreshNameTag = () => {};
 
 // Phones/tablets have no mouse to pointer-lock and no keyboard for WASD —
 // mobileActive is the touch-controls equivalent of controls.isLocked.
-const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 let mobileActive = false;
 
 function startGame() {
