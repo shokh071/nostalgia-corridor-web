@@ -93,6 +93,23 @@ const startBtn = document.getElementById('startBtn');
 let playerName = 'Mehmon';
 let refreshNameTag = () => {};
 
+// ---------- Telegram Mini App ----------
+// window.Telegram.WebApp only exists when the page is opened inside Telegram;
+// everywhere else (a normal browser tab) this whole block is skipped.
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand(); // use the full screen instead of Telegram's half-height sheet
+  try { tg.disableVerticalSwipes(); } catch (_) {} // don't let swipe-down-to-close fight with look-drag
+  try { tg.setHeaderColor('#05050a'); } catch (_) {}
+  try { tg.setBackgroundColor('#05050a'); } catch (_) {}
+  const tgUser = tg.initDataUnsafe?.user;
+  if (tgUser?.first_name) {
+    playerName = tgUser.first_name.slice(0, 16);
+    nameInput.value = playerName;
+  }
+}
+
 // Phones/tablets have no mouse to pointer-lock and no keyboard for WASD —
 // mobileActive is the touch-controls equivalent of controls.isLocked.
 let mobileActive = false;

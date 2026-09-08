@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Nostalgia" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     html, body { margin: 0; padding: 0; overflow: hidden; background: #000; height: 100%; }
     canvas { display: block; touch-action: none; }
@@ -119,7 +120,7 @@
     }
   }
   </script>
-  <script type="module" src="./main.js?v=43"></script>
+  <script type="module" src="./main.js?v=44"></script>
   <script>
     if ('serviceWorker' in navigator) {
       const registerSW = () => navigator.serviceWorker.register('./sw.js').catch(() => {});
