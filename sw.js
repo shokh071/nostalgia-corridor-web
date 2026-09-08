@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nostalgia-corridor-v4';
+const CACHE_NAME = 'nostalgia-corridor-v5';
 const CORE_ASSETS = ['./', './index.html', './main.js', './manifest.json'];
 
 self.addEventListener('install', (event) => {

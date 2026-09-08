@@ -36,11 +36,8 @@ const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x030304);
 scene.fog = new THREE.Fog(0x0c0b12, 9, 30);
-const INDOOR_FOG = { color: 0x0c0b12, near: 9, far: 30 };
-const OUTDOOR_FOG = { color: 0xcfe6f5, near: 30, far: 140 };
-let isOutdoors = false;
 
-const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 45);
 camera.rotation.y = Math.PI; // face down the corridor (+Z), not back at the entrance wall
 
 // playerPos is the character's real position (feet on the floor); the render camera
@@ -90,7 +87,7 @@ const controls = new PointerLockControls(camera, renderer.domElement);
 const overlay = document.getElementById('overlay');
 const nameInput = document.getElementById('nameInput');
 const startBtn = document.getElementById('startBtn');
-let playerName = 'Mehmon';
+let playerName = ''; // no name typed = no tag above the head at all
 let refreshNameTag = () => {};
 
 // ---------- Telegram Mini App ----------
@@ -262,7 +259,7 @@ if (isTouchDevice) {
     e.preventDefault();
     thirdPerson = !thirdPerson;
     if (playerModel) playerModel.visible = thirdPerson;
-    nameTagSprite.visible = thirdPerson;
+    nameTagSprite.visible = thirdPerson && !!playerName;
   }, { passive: false });
 }
 
@@ -337,11 +334,15 @@ function makeNameTagTexture(name) {
   return tex;
 }
 
-const nameTagSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeNameTagTexture(playerName), transparent: true, depthTest: false }));
+const nameTagSprite = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false }));
 nameTagSprite.scale.set(0.55, 0.14, 1);
 nameTagSprite.renderOrder = 10;
+nameTagSprite.visible = false;
 scene.add(nameTagSprite);
-refreshNameTag = () => { nameTagSprite.material.map = makeNameTagTexture(playerName); };
+refreshNameTag = () => {
+  if (playerName) nameTagSprite.material.map = makeNameTagTexture(playerName);
+  nameTagSprite.visible = thirdPerson && !!playerName;
+};
 
 new GLTFLoader().load('./models/player.glb', (gltf) => {
   playerModel = gltf.scene;
@@ -428,7 +429,9 @@ function addRemotePlayer(id, name, x, y, z, ry) {
   for (const clip of playerGltfTemplate.animations) actions[clip.name] = mixer.clipAction(clip);
   actions.Idle?.play();
 
-  const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeNameTagTexture(name), transparent: true, depthTest: false }));
+  const tag = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false }));
+  if (name) tag.material.map = makeNameTagTexture(name);
+  else tag.visible = false;
   tag.scale.set(0.55, 0.14, 1);
   tag.renderOrder = 10;
   scene.add(tag);
@@ -834,27 +837,6 @@ const benchMat = new THREE.MeshStandardMaterial({
 const benchLegMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.35, metalness: 0.65, envMapIntensity: 1 });
 const floorAOTex = makeFloorAOTexture();
 
-const grassPBR = loadPBR('./textures/grass', 22, 22);
-const grassMat = new THREE.MeshStandardMaterial({
-  map: grassPBR.diff, normalMap: grassPBR.norm, roughnessMap: grassPBR.rough, roughness: 1, envMapIntensity: 0.3,
-});
-const roofPBR = loadPBR('./textures/roof', 2, 1.5);
-const roofMat = new THREE.MeshStandardMaterial({
-  map: roofPBR.diff, normalMap: roofPBR.norm, roughnessMap: roofPBR.rough, roughness: 1, envMapIntensity: 0.4,
-});
-const cottageWallMat = new THREE.MeshStandardMaterial({ color: 0xe8ddc7, roughness: 0.85 });
-const cottageTrimMat = new THREE.MeshStandardMaterial({ color: 0x5a7a4a, roughness: 0.8 });
-const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4030, roughness: 0.95 });
-const treeLeafMat = new THREE.MeshStandardMaterial({ color: 0x4a7a3a, roughness: 0.85 });
-
-// bright midday sky for the courtyard, loaded once and shared
-const sunnySkyMat = new THREE.MeshBasicMaterial({ color: 0xbfe0ff, side: THREE.BackSide, fog: false });
-new RGBELoader().load('./textures/hdri/sunny.hdr', (tex) => {
-  sunnySkyMat.map = tex;
-  sunnySkyMat.color.set(0xffffff);
-  sunnySkyMat.needsUpdate = true;
-});
-
 // ---------- Colliders ----------
 const colliders = [];
 function addBoxCollider(mesh) {
@@ -894,10 +876,10 @@ doorwayLight.position.set(-CORRIDOR_HALF_W + 0.6, CORRIDOR_HEIGHT - 0.4, DOOR_Z)
 scene.add(doorwayLight);
 scene.add(new THREE.AmbientLight(0x5c5966, 1.15));
 
-function buildSideWalls(doorZs) {
+function buildSideWalls(doorZsBySide) {
   for (const side of ['left', 'right']) {
     const x = side === 'left' ? -CORRIDOR_HALF_W : CORRIDOR_HALF_W;
-    const sorted = [...doorZs].sort((a, b) => a - b);
+    const sorted = [...doorZsBySide[side]].sort((a, b) => a - b);
     const segments = [];
     let prev = 0;
     for (const z of sorted) {
@@ -1070,11 +1052,16 @@ function buildGalleryRoom(side, z) {
       group.add(panel);
     }
   }
-  // soft even skylight illumination
-  const skylight = new THREE.RectAreaLight(0xeaf1ff, 3.2, ROOM_DEPTH * 0.85, ROOM_WIDTH * 0.85);
-  skylight.position.set(0, ROOM_HEIGHT - 0.1, 0);
-  skylight.rotation.x = -Math.PI / 2;
-  group.add(skylight);
+  // soft even skylight illumination — a RectAreaLight is by far the priciest light type
+  // per fragment, so phones get a plain hemisphere fill standing in for it instead
+  if (isTouchDevice) {
+    group.add(new THREE.HemisphereLight(0xeaf1ff, 0x4a4436, 1.5));
+  } else {
+    const skylight = new THREE.RectAreaLight(0xeaf1ff, 3.2, ROOM_DEPTH * 0.85, ROOM_WIDTH * 0.85);
+    skylight.position.set(0, ROOM_HEIGHT - 0.1, 0);
+    skylight.rotation.x = -Math.PI / 2;
+    group.add(skylight);
+  }
   // gentle directional key light for grounding — shadow-casting turned OFF (a shadow map is
   // an entire extra render pass, by far the most expensive single lighting feature)
   const keyLight = new THREE.DirectionalLight(0xfff6e6, 0.35);
@@ -1219,138 +1206,6 @@ function buildGalleryRoom(side, z) {
   return group;
 }
 
-// ---------- Outdoor courtyard (door 2): grass, a water canal, cottages, trees ----------
-const COURTYARD_DEPTH = 44; // along X, away from the corridor
-const COURTYARD_WIDTH = 40; // along Z
-const waterAnimTextures = [];
-
-function buildTree(group, x, z) {
-  const trunkH = 2.2 + Math.random() * 1.3;
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.24, trunkH, 7), treeTrunkMat);
-  trunk.position.set(x, trunkH / 2, z);
-  trunk.castShadow = true;
-  group.add(trunk);
-  for (let i = 0; i < 3; i++) {
-    const r = 1.1 + Math.random() * 0.55;
-    const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), treeLeafMat);
-    leaf.position.set(x + (Math.random() - 0.5) * 0.9, trunkH + r * 0.55 + i * 0.55, z + (Math.random() - 0.5) * 0.9);
-    leaf.castShadow = true;
-    group.add(leaf);
-  }
-}
-
-function buildCottage(group, x, z, dirSign) {
-  const w = 6, d = 5, h = 3;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), cottageWallMat);
-  body.position.set(x, h / 2, z);
-  body.castShadow = true;
-  body.receiveShadow = true;
-  group.add(body);
-  addBoxCollider(body);
-
-  const roofH = 2.1;
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.72, roofH, 4), roofMat);
-  roof.position.set(x, h + roofH / 2, z);
-  roof.rotation.y = Math.PI / 4;
-  roof.castShadow = true;
-  group.add(roof);
-
-  const doorMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.8), cottageTrimMat);
-  doorMesh.position.set(x - dirSign * (w / 2 + 0.01), 0.9, z);
-  doorMesh.rotation.y = Math.PI / 2;
-  group.add(doorMesh);
-
-  const shutterGeo = new THREE.PlaneGeometry(0.5, 0.9);
-  [-1.3, 1.3].forEach((dz) => {
-    const shutter = new THREE.Mesh(shutterGeo, cottageTrimMat);
-    shutter.position.set(x - dirSign * (w / 2 + 0.01), 1.7, z + dz);
-    shutter.rotation.y = Math.PI / 2;
-    group.add(shutter);
-  });
-}
-
-function buildCourtyard(side, z) {
-  const dirSign = side === 'left' ? -1 : 1;
-  const nearX = dirSign * CORRIDOR_HALF_W;
-  const centerX = nearX + dirSign * (COURTYARD_DEPTH / 2);
-  const doorLocalX = -dirSign * (COURTYARD_DEPTH / 2);
-
-  const group = new THREE.Group();
-  group.position.set(centerX, 0, z);
-  scene.add(group);
-
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(COURTYARD_DEPTH, COURTYARD_WIDTH), grassMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  group.add(ground);
-
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(80, 32, 16), sunnySkyMat);
-  group.add(sky);
-
-  // contained "sun": a tight downward cone + hard distance cutoff so this bright light
-  // cannot leak back through the door into the dark corridor/gallery
-  const sun = new THREE.SpotLight(0xfff4e0, 26, 55, 0.5, 0.35, 1.2);
-  sun.position.set(0, 40, 0);
-  sun.target.position.set(dirSign * -6, 0, 0);
-  group.add(sun, sun.target);
-
-  // canal running across the width, toward the far end from the door
-  const canalLocalX = dirSign * (COURTYARD_DEPTH / 2 - 9);
-  const canalWidth = 6;
-  // simple, crash-safe water: a bump-mapped tinted plane using the shared env map for
-  // its reflective sheen, instead of a live per-frame reflection render target
-  const waterNormals = textureLoader.load('./textures/waternormals.jpg');
-  waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
-  waterNormals.repeat.set(4, 3);
-  const waterMat = new THREE.MeshStandardMaterial({
-    color: 0x2f6a52, roughness: 0.12, metalness: 0.05,
-    normalMap: waterNormals, normalScale: new THREE.Vector2(0.25, 0.25),
-    envMapIntensity: 1.4,
-  });
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(canalWidth, COURTYARD_WIDTH - 4), waterMat);
-  water.rotation.x = -Math.PI / 2;
-  water.position.set(canalLocalX, 0.03, 0);
-  group.add(water);
-  waterAnimTextures.push(waterNormals);
-
-  // curb along the near edge of the canal so the player can't walk into it
-  const curb = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, COURTYARD_WIDTH - 4), cottageTrimMat);
-  curb.position.set(canalLocalX - dirSign * (canalWidth / 2 + 0.2), 0.2, 0);
-  group.add(curb);
-  addBoxCollider(curb);
-
-  // cottages across the canal
-  const cottageX = canalLocalX + dirSign * (canalWidth / 2 + 6.5);
-  buildCottage(group, cottageX, -11, dirSign);
-  buildCottage(group, cottageX, 11, dirSign);
-
-  // trees scattered on the walkable near side, between the door and the canal
-  for (let i = 0; i < 9; i++) {
-    const frac = 0.15 + Math.random() * 0.6;
-    const tx = doorLocalX + (canalLocalX - doorLocalX) * frac;
-    const tz = (Math.random() - 0.5) * (COURTYARD_WIDTH - 6);
-    buildTree(group, tx, tz);
-  }
-
-  // invisible boundary walls around the courtyard perimeter (far + two sides; door side stays open)
-  const boundaryMat = new THREE.MeshBasicMaterial({ visible: false });
-  const farWall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 8, COURTYARD_WIDTH), boundaryMat);
-  farWall.position.set(dirSign * COURTYARD_DEPTH / 2, 4, 0);
-  group.add(farWall);
-  addBoxCollider(farWall);
-  const sideWallGeo = new THREE.BoxGeometry(COURTYARD_DEPTH, 8, 0.5);
-  const wallPos = new THREE.Mesh(sideWallGeo, boundaryMat);
-  wallPos.position.set(0, 4, COURTYARD_WIDTH / 2);
-  group.add(wallPos);
-  addBoxCollider(wallPos);
-  const wallNeg = new THREE.Mesh(sideWallGeo, boundaryMat);
-  wallNeg.position.set(0, 4, -COURTYARD_WIDTH / 2);
-  group.add(wallNeg);
-  addBoxCollider(wallNeg);
-
-  return group;
-}
-
 function buildDoor(side, z, label, roomBuilder) {
   const dirSign = side === 'left' ? -1 : 1;
   const wallX = dirSign * CORRIDOR_HALF_W;
@@ -1399,10 +1254,8 @@ function buildDoor(side, z, label, roomBuilder) {
   doors.push(doorObj);
 }
 
-const doorZs = [DOOR_Z];
-buildSideWalls(doorZs);
+buildSideWalls({ left: [DOOR_Z], right: [] });
 buildDoor('left', DOOR_Z, 'Galereya', buildGalleryRoom);
-buildDoor('right', DOOR_Z, 'Koʻcha', buildCourtyard);
 
 // ---------- Movement ----------
 const keys = { w: false, a: false, s: false, d: false };
@@ -1429,7 +1282,7 @@ document.addEventListener('keydown', (e) => {
   if (k === 'v') {
     thirdPerson = !thirdPerson;
     if (playerModel) playerModel.visible = thirdPerson;
-    nameTagSprite.visible = thirdPerson;
+    nameTagSprite.visible = thirdPerson && !!playerName;
   }
   if (e.key === 'Enter' && controls.isLocked) {
     chatInput.style.display = 'block';
@@ -1577,7 +1430,6 @@ function animate() {
   });
 
   if (playerMixer) playerMixer.update(dt);
-  for (const t of waterAnimTextures) { t.offset.x += dt * 0.015; t.offset.y += dt * 0.008; }
   updateRemotePlayers(dt);
 
   if (controls.isLocked || mobileActive) {
@@ -1633,14 +1485,6 @@ function animate() {
       playerModel.position.set(playerPos.x, playerPos.y, playerPos.z);
       const angleDiff = ((playerFacing - playerModel.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       playerModel.rotation.y += angleDiff * Math.min(1, dt * 10);
-    }
-    const nowOutdoors = playerPos.x > CORRIDOR_HALF_W + 0.5;
-    if (nowOutdoors !== isOutdoors) {
-      isOutdoors = nowOutdoors;
-      const f = isOutdoors ? OUTDOOR_FOG : INDOOR_FOG;
-      scene.fog.color.setHex(f.color);
-      scene.fog.near = f.near;
-      scene.fog.far = f.far;
     }
 
     nameTagSprite.position.set(playerPos.x, playerPos.y + 1.92, playerPos.z);
